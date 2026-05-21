@@ -1,0 +1,56 @@
+# Talon baseimage v0.1.0 — Alpine 3.20 预装包清单
+#
+# 注释行（# 开头）+ 空行被 build.sh 过滤。每行一个 apk 包。
+# 改这里就是改你向用户承诺的"打开 sandbox 默认有什么"。
+#
+# 增减包之后必须 bump 版本号（patch 或 minor），不要原地改：
+#   - 加/去包 → minor (v0.1.0 → v0.2.0)
+#   - 同集合升级 apk 自身版本 → patch (v0.1.0 → v0.1.1)
+#
+# 排序：按类别分组，便于 review。
+
+# ---- shell 兼容 ----
+# 99% 的 agent 脚本写 #!/bin/bash 或依赖 GNU coreutils 行为；
+# alpine 默认 busybox 不兼容（如 ls --color、cp -a 行为差异），必须装 GNU 套件
+bash
+coreutils
+findutils
+grep
+sed
+less
+tar
+
+# ---- 证书 ----
+# 不装 HTTPS 全报 cert verify failed
+ca-certificates
+
+# ---- 网络 / VCS ----
+# 拉仓库 / 调 API 必备
+git
+curl
+wget
+openssh-client
+jq
+
+# ---- Python ----
+# python3 + pip 是 agent 脚本最常见运行环境
+# python3-dev + gcc + musl-dev + linux-headers 让 pip wheel 装不上时
+# 能 fallback 源码编译（常见 PEP 517 包都需要）
+python3
+py3-pip
+python3-dev
+gcc
+musl-dev
+linux-headers
+
+# ---- Node.js ----
+# Node 20 是 alpine 3.20 仓库当前 LTS
+# corepack 让 pnpm / yarn 走自动激活，不用全局 npm install
+nodejs
+npm
+# corepack 在 alpine 上是 npm 的一部分，无需单独安装；
+# 如果未来 alpine 拆开了再加 'corepack' 这行
+
+# ---- 系统友好 ----
+# 没装 tzdata 时 date 命令显示 UTC、Python datetime 也认不出本地时区
+tzdata
