@@ -64,6 +64,41 @@ var DefaultAlpine = Spec{
 }
 ```
 
+## Using with Docker / Podman / containerd
+
+The release artifact is a **raw rootfs tarball** (`bin/ etc/ usr/ home/ …` at
+the top level), produced by `docker export` — not `docker save`. So
+`docker pull` / `docker load` won't work. You import it instead:
+
+```bash
+# Pick whichever flavor + version you want
+URL=https://github.com/darkmice/talon-baseimages/releases/download/code-browser-v0.1.0/talon-code-browser-0.1.0-x86_64.tar.gz
+
+curl -sfLo image.tar.gz "$URL"
+curl -sfL  "${URL}.sha256" | sha256sum -c -    # verify
+
+# Docker
+docker import image.tar.gz talon-code-browser:0.1.0
+
+docker run --rm -it --platform linux/amd64 \
+  talon-code-browser:0.1.0 \
+  bash -c "chromium --version"
+
+# Podman / containerd are analogous
+podman import image.tar.gz talon-code-browser:0.1.0
+ctr image import --base-layer image.tar.gz docker.io/library/talon-code-browser:0.1.0
+```
+
+Caveats:
+
+- `docker import` drops image metadata (no `ENV`/`CMD`/`ENTRYPOINT`) — pass
+  them via `docker run`, or build a thin wrapper `FROM talon-code-browser:…`.
+- `--platform linux/amd64` matters on Apple Silicon / arm64 hosts; tarballs
+  are x86_64 only.
+- Intended consumer is still `agent-sandbox-platform`'s runc adapter — Docker
+  is for ad-hoc inspection / sanity checks. See per-flavor README for the
+  flavor-specific runtime layout.
+
 ## Building locally
 
 You need Docker; each flavor's `build.sh` runs the base image in a throwaway
