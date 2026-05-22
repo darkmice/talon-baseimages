@@ -1,16 +1,32 @@
 name: release
 
-# 触发：push 一个 vX.Y.Z 形式的 tag。
-# 流程：ubuntu-latest runner 跑 build.sh（自带 docker），上传 tarball + .sha256
-#       到对应的 GitHub Release。
+# 触发：push 一个 tag。支持多 flavor:
+#   - alpine-vX.Y.Z         → 跑 alpine-3.20/build.sh
+#   - code-browser-vX.Y.Z   → 跑 code-browser/build.sh
+#   - vX.Y.Z (legacy)       → 兼容旧的 alpine-only flow，等同 alpine-vX.Y.Z
 #
-# 手动触发 (workflow_dispatch) 留作回填或紧急修复时用 —— 跑相同步骤但不发 release。
+# 手动触发 (workflow_dispatch) 留作回填或紧急修复时用，必须显式选 flavor。
+#
+# Runner: ubuntu-latest 自带 docker；build.sh 都是 docker-based。
 
 on:
   push:
     tags:
-      - 'v*'
+      - 'alpine-v*'
+      - 'code-browser-v*'
+      - 'v*'           # legacy alpine
   workflow_dispatch:
+    inputs:
+      flavor:
+        description: 'Which flavor to build'
+        required: true
+        type: choice
+        options:
+          - alpine
+          - code-browser
+      version:
+        description: 'Version (e.g. 0.1.0)'
+        required: true
 
 permissions:
   # 写 release 需要：upload-release-asset 走 GITHUB_TOKEN
@@ -23,34 +39,74 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Resolve VERSION from tag
-        id: version
-        # v0.1.0 → 3.20.0 不对应；VERSION 在 build.sh 里指 alpine patch (3.20.x)。
-        # tag 里直接编码 alpine version：tag "v3.20.0" → VERSION=3.20.0
-        # 而 release 名 "Talon baseimage v3.20.0" 是给人看的。
+      - name: Resolve flavor + version
+        id: resolve
+        # 把 tag 名拆成 flavor + version。
+        # workflow_dispatch 路径用 inputs.flavor / inputs.version。
+        # push tag 路径按前缀分流。
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          VER=${TAG#v}
-          echo "tag=$TAG"     >> "$GITHUB_OUTPUT"
-          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            FLAVOR="${{ github.event.inputs.flavor }}"
+            VERSION="${{ github.event.inputs.version }}"
+            TAG=""
+          else
+            TAG="${GITHUB_REF#refs/tags/}"
+            case "$TAG" in
+              alpine-v*)
+                FLAVOR="alpine"
+                VERSION="${TAG#alpine-v}"
+                ;;
+              code-browser-v*)
+                FLAVOR="code-browser"
+                VERSION="${TAG#code-browser-v}"
+                ;;
+              v*)
+                # legacy: 老的 vX.Y.Z 等同 alpine-vX.Y.Z
+                FLAVOR="alpine"
+                VERSION="${TAG#v}"
+                ;;
+              *)
+                echo "unknown tag format: $TAG" >&2
+                exit 1
+                ;;
+            esac
+          fi
+          echo "flavor=$FLAVOR"   >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG"         >> "$GITHUB_OUTPUT"
+          # asset 名前缀：alpine → talon-alpine-; code-browser → talon-code-browser-
+          case "$FLAVOR" in
+            alpine)       PREFIX="talon-alpine" ;;
+            code-browser) PREFIX="talon-code-browser" ;;
+          esac
+          echo "asset_prefix=$PREFIX" >> "$GITHUB_OUTPUT"
 
       - name: Build tarball
         env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: bash alpine-3.20/build.sh
+          VERSION: ${{ steps.resolve.outputs.version }}
+        run: |
+          set -euo pipefail
+          case "${{ steps.resolve.outputs.flavor }}" in
+            alpine)
+              bash alpine-3.20/build.sh
+              ;;
+            code-browser)
+              bash code-browser/build.sh
+              ;;
+          esac
 
       - name: Show artifacts
         run: |
           ls -la out/
-          cat out/*.sha256
+          cat out/*.sha256 || true
 
       - name: Upload release assets
         if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
-          # 自动用 tag 名建 release（v3.20.0 → release "v3.20.0"）
-          # 不传 body，让 release notes 由 release 维护者手填或后续 PR 补
+          # 自动用 tag 名建 release
           files: |
-            out/talon-alpine-${{ steps.version.outputs.version }}-x86_64.tar.gz
-            out/talon-alpine-${{ steps.version.outputs.version }}-x86_64.tar.gz.sha256
+            out/${{ steps.resolve.outputs.asset_prefix }}-${{ steps.resolve.outputs.version }}-x86_64.tar.gz
+            out/${{ steps.resolve.outputs.asset_prefix }}-${{ steps.resolve.outputs.version }}-x86_64.tar.gz.sha256
           fail_on_unmatched_files: true

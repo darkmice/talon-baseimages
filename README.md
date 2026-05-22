@@ -1,12 +1,21 @@
 # talon-baseimages
 
 Pre-built sandbox base images for [Talon Agent Sandbox](https://github.com/darkmice/agent-sandbox-platform).
-A small Alpine-based rootfs bundling the runtime tooling an AI agent typically
-needs (bash, GNU coreutils, git, curl, jq, python3 + pip, node 20 + npm, …) so
-each new sandbox starts with a usable environment instead of a 3.5 MB busybox-only
-minirootfs.
+Each "flavor" is a self-contained subdirectory that produces a raw rootfs
+tarball + sha256, consumed by `internal/runtime/baseimage` on the platform side.
 
-## What's inside
+## Flavors
+
+| Directory | Tag prefix | Asset name | Size (gzip) | Purpose |
+|---|---|---|---|---|
+| [`alpine-3.20/`](./alpine-3.20/) | `alpine-v` (or legacy `v`) | `talon-alpine-X.Y.Z-x86_64.tar.gz` | ~70 MB | **Default.** Lightweight alpine + bash/coreutils/git/curl/jq/python3/node 20. |
+| [`code-browser/`](./code-browser/) | `code-browser-v` | `talon-code-browser-X.Y.Z-x86_64.tar.gz` | ~700 MB | Debian Trixie + chromium + browser-harness + CJK fonts. For sandboxes needing real browser automation (Spec 34 / Spec 38). |
+
+CI: pushing a tag with the prefix above triggers
+[`.github/workflows/release.yml`](.github/workflows/release.yml), which builds
+the matching flavor on ubuntu-latest and uploads the two assets to a release.
+
+## What's in `alpine-3.20`
 
 See `alpine-3.20/packages.txt` for the authoritative package list. As of v0.1.0:
 
@@ -19,10 +28,11 @@ See `alpine-3.20/packages.txt` for the authoritative package list. As of v0.1.0:
 
 Expected size: ~200 MB rootfs, ~70 MB gzipped tarball.
 
-## Versioning
+## Versioning (alpine flavor)
 
 ```
-v<MAJOR>.<MINOR>.<PATCH>
+alpine-v<MAJOR>.<MINOR>.<PATCH>     # preferred
+v<MAJOR>.<MINOR>.<PATCH>            # legacy, kept for backward compat
 ```
 - **MAJOR** — Alpine major version change (e.g. 3.20 → 3.21 → 4.0) or breaking change for downstream consumers.
 - **MINOR** — package set changes (added or removed packages).
@@ -33,6 +43,9 @@ Releases are GitHub Releases on this repo with two assets:
 talon-alpine-<version>-x86_64.tar.gz
 talon-alpine-<version>-x86_64.tar.gz.sha256
 ```
+
+(See [`code-browser/README.md`](./code-browser/README.md) for that flavor's
+versioning rules — separate cadence.)
 
 ## How sandbox-worker consumes it
 
@@ -53,25 +66,27 @@ var DefaultAlpine = Spec{
 
 ## Building locally
 
-You need Docker; the script runs `alpine:3.20` in a throwaway container, installs
-packages, and `docker export`s the result.
+You need Docker; each flavor's `build.sh` runs the base image in a throwaway
+container (or `docker build` for `code-browser`), then `docker export`s the
+result.
 
 ```bash
-bash alpine-3.20/build.sh
-# → out/talon-alpine-3.20.0-x86_64.tar.gz
-# → out/talon-alpine-3.20.0-x86_64.tar.gz.sha256
+# alpine flavor
+bash alpine-3.20/build.sh                       # → out/talon-alpine-3.20.0-x86_64.tar.gz
+VERSION=3.20.1 bash alpine-3.20/build.sh        # specific patch
+
+# code-browser flavor
+bash code-browser/build.sh                      # → out/talon-code-browser-0.1.0-x86_64.tar.gz
+VERSION=0.2.0 bash code-browser/build.sh
 ```
 
-A specific patch version:
-```bash
-VERSION=3.20.1 bash alpine-3.20/build.sh
-```
+The shared `out/` directory at repo root collects both flavors' artifacts.
 
 ## CI
 
-Pushing a tag matching `v*` triggers `.github/workflows/release.yml`, which runs
-`build.sh` on Ubuntu and uploads the two assets to the release. See that file
-for details.
+`.github/workflows/release.yml` is shared across flavors. Tag prefixes route
+to the matching `build.sh`. Manual runs via `workflow_dispatch` require
+choosing the flavor + version explicitly.
 
 ## License
 
