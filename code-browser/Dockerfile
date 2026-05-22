@@ -26,11 +26,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       bash zsh \
       ca-certificates curl wget jq \
       git openssh-client \
-      python3 python3-pip python3-venv \
+      python3 python3-pip python3-venv python-is-python3 \
       nodejs npm \
       tzdata locales \
       sudo \
     && rm -rf /var/lib/apt/lists/*
+# python-is-python3: Debian Trixie 起 /usr/bin/python 默认不再存在(PEP 394),
+# 这个包提供 /usr/bin/python -> python3 软链。agent 调 `python script.py` 时
+# 不会 "executable file not found"。Trixie 上这是个几 KB 的 dummy 包,~0 体积。
 
 # Layer 2: chromium + 字体 + chromium 运行时依赖。
 # Debian 的 chromium 包名就是 chromium（不是 chromium-browser，那是 Ubuntu）；
