@@ -30,10 +30,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       nodejs npm \
       tzdata locales \
       sudo \
+      tini \
     && rm -rf /var/lib/apt/lists/*
 # python-is-python3: Debian Trixie 起 /usr/bin/python 默认不再存在(PEP 394),
 # 这个包提供 /usr/bin/python -> python3 软链。agent 调 `python script.py` 时
 # 不会 "executable file not found"。Trixie 上这是个几 KB 的 dummy 包,~0 体积。
+#
+# tini: runc adapter 把 init 进程从裸 sleep 换成 tini -- sleep infinity。tini 当
+# PID 1 reap reparent 进程,避免 chromium 反复启停产生的 <defunct> 堆积耗尽 PID 表。
+# Debian 包 tini 装到 /usr/bin/tini。
 
 # Layer 2: chromium + 字体 + chromium 运行时依赖。
 # Debian 的 chromium 包名就是 chromium（不是 chromium-browser，那是 Ubuntu）；

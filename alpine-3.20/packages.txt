@@ -54,3 +54,10 @@ npm
 # ---- 系统友好 ----
 # 没装 tzdata 时 date 命令显示 UTC、Python datetime 也认不出本地时区
 tzdata
+
+# ---- init (PID 1) ----
+# runc adapter 把 sandbox init 从裸 sleep 换成 `tini -g -- sleep infinity`,让 PID 1
+# 正确 reap reparent 进程,避免 chromium / 其它 fork-heavy 业务死了堆 <defunct>。
+# alpine 的 tini 装到 /sbin/tini,与 debian 的 /usr/bin/tini 不同——runc adapter
+# 端两个路径都试,这边只确保包装上。
+tini
